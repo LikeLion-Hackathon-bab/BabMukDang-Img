@@ -64,7 +64,6 @@ jobs:
 
       # 3) 즉시 반영이 꼭 필요할 때만(선택)
       - name: Invalidate categories.json (optional)
-        if: ${{ secrets.CF_DISTRIBUTION_ID }}
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "${{ secrets.CF_DISTRIBUTION_ID }}" \
