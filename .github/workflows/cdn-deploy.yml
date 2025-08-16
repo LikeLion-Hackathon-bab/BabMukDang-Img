@@ -1,0 +1,71 @@
+name: CDN Deploy
+
+on:
+  push:
+    branches: [main] # 배포 브랜치
+    paths:
+      - "public/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/cdn-deploy.yml"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+concurrency:
+  group: cdn-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # 필요 시: 빌드 스크립트(썸네일/매니페스트 생성)
+      - name: Build images & manifest
+        run: npm run build:images
+
+      - name: Configure AWS creds (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # 1) 이미지: 1년 캐시 + immutable
+      - name: Sync images (immutable)
+        run: |
+          aws s3 sync public/img "s3://${{ secrets.S3_BUCKET }}/img" \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable" \
+            --only-show-errors
+
+      # 2) 카테고리 매니페스트: 짧은 캐시
+      - name: Upload categories.json
+        run: |
+          aws s3 cp public/categories.json "s3://${{ secrets.S3_BUCKET }}/categories.json" \
+            --cache-control "public,max-age=60" \
+            --content-type "application/json" \
+            --only-show-errors
+
+      # 3) 즉시 반영이 꼭 필요할 때만(선택)
+      - name: Invalidate categories.json (optional)
+        if: ${{ secrets.CF_DISTRIBUTION_ID != '' }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.CF_DISTRIBUTION_ID }}" \
+            --paths "/categories.json"
