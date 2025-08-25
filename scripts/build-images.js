@@ -52,7 +52,14 @@ async function main() {
   let idCounter = 0;
   for (const file of files) {
     idCounter++;
-    const id = path.basename(file).replace(/\.(jpg|jpeg|png)$/i, "");
+    const baseName = path.basename(file).replace(/\.(jpg|jpeg|png)$/i, "");
+    let id = baseName;
+    let name = baseName;
+    const m = baseName.match(/^([0-9]{8})_(.+)$/);
+    if (m) {
+      id = m[1];
+      name = m[2];
+    }
     const inputBuf = await fs.readFile(file);
     const baseHash = h(inputBuf).slice(0, 8);
     const fileBase = getFileBase(id || `cat_${idCounter}`, baseHash);
@@ -80,7 +87,7 @@ async function main() {
     const mid = entries[Math.min(1, entries.length - 1)];
     manifest.push({
       id: id || `cat_${idCounter}`,
-      name: id,
+      name: name,
       aspectRatio: lqip.aspectRatio,
       placeholder: {
         thumbhashDataURL: lqip.thumbhashDataURL,
